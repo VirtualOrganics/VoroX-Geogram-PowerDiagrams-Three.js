@@ -504,6 +504,7 @@
         let weights = null;           // Per-cell weights for power diagram
         let lastTargets = null;       // Cached Vtarget from Brain
         let lastPowerVolumes = null;  // Cached Vcurrent per-site from last power eval
+        let brainAvgMs = null;        // EWMA of Brain runtime
         let lastScoreMethod = null;   // 'pagerank' | 'mc'
         let lastScoreParams = null;   // params used for last compute
         let lastScoreTimestamp = null;// Date.now()
