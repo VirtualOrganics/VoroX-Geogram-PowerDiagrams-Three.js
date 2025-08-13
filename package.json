@@ -1,0 +1,12 @@
+{
+  "name": "VoroX-Geogram-PowerDiagrams-Three.js",
+  "version": "0.0.1",
+  "private": false,
+  "description": "Brain/Physical two-phase scaffold — Brain computes obtuse-edge scores (MC/PR) → per-cell targets; Physical will solve Laguerre weights for power diagram volumes.",
+  "type": "module",
+  "scripts": {
+    "dev": "npx http-server -c-1 ."
+  }
+}
+
+
