@@ -1922,7 +1922,7 @@
             // Initialize Brain worker (optional)
             try {
                 brainWorker = new Worker('../../src/js/workers/brain.worker.js', { type: 'module' });
-                brainWorker.onmessage = (ev) => {
+                brainWorker.onmessage = async (ev) => {
                     const { foamHash, method, params, runtimeMs, scores, stats } = ev.data || {};
                     const sig = `${foamHash}|${method}|${JSON.stringify(params)}`;
                     // Always clear overlay/flight to avoid spinner lock, even on stale
