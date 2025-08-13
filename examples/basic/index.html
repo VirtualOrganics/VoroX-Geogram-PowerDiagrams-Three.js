@@ -2566,15 +2566,7 @@
             });
 
             // Hide/show Verlet controls based on XPBD usage
-            function updateVerletVisibility() {
-                const useXPBD = !!document.getElementById('dynUseEdgeMode').checked; // XPBD only in edge mode
-                // legacy verlet controls removed
-                if (verletRow) verletRow.style.display = useXPBD ? 'none' : '';
-                if (verletChk) verletChk.style.display = useXPBD ? 'none' : '';
-            }
-            updateVerletVisibility();
-            const edgeModeEl = document.getElementById('dynUseEdgeMode');
-            if (edgeModeEl) edgeModeEl.addEventListener('change', updateVerletVisibility);
+            // Removed legacy Verlet visibility toggles
 
             function scheduleAutoRecompute(){
                 if (autoTimeout) { clearTimeout(autoTimeout); autoTimeout = null; }
