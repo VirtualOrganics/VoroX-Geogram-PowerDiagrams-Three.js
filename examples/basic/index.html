@@ -2286,39 +2286,36 @@
                                 // Step 1: fast visibility — color by target or error
                                 const colorMode = (document.getElementById('colorBy')?.value || 'score');
                                 if (colorMode === 'target' || colorMode === 'error') {
+                                    // Ensure score-based face coloring is disabled when overriding by power
+                                    const faceScoreChk = document.getElementById('voroxColorByScore');
+                                    if (faceScoreChk && faceScoreChk.checked) faceScoreChk.checked = false;
                                     try {
-                                        const foam = voroxInstance.getFoam();
-                                        const group = voronoiGroup;
-                                        // simple per-site color: use barycenters or vertex proxies
-                                        const colors = [];
-                                        if (colorMode === 'target' && lastTargets?.pBySite) {
-                                            const arr = lastTargets.pBySite;
-                                            const mn = -0.1, mx = 0.1; // visualize around ±10%
-                                            for (let s=0; s<arr.length; s++) {
-                                                const v = Math.max(-1, Math.min(1, arr[s]||0));
-                                                const t = (v - mn) / (mx - mn);
-                                                const r = Math.max(0, Math.min(1, t));
-                                                colors[s] = r;
-                                            }
-                                        } else if (colorMode === 'error' && lastV) {
-                                            const Vt = lastTargets?.Vtarget || [];
-                                            const Ve = [];
-                                            for (let s=0; s<lastV.length; s++) Ve[s] = (Vt[s]||0) - (lastV[s]||0);
-                                            // scale error to color
-                                            const scale = 1.0; // heuristic
-                                            for (let s=0; s<Ve.length; s++) {
-                                                const v = Math.max(-1, Math.min(1, (Ve[s]||0)*scale));
-                                                colors[s] = (v+1)/2;
-                                            }
-                                        }
-                                        // Apply to voronoi face meshes if present
+                                        // Apply to voronoi face meshes by site id
                                         if (voronoiFacesGroup && voronoiFacesGroup.children.length) {
-                                            voronoiFacesGroup.children.forEach((mesh, idx)=>{
-                                                const k = idx % colors.length;
-                                                const t = colors[k] ?? 0.5;
-                                                const col = new THREE.Color().setHSL((1-t)*0.33, 0.9, 0.5);
-                                                if (mesh.material && mesh.material.color) mesh.material.color.copy(col);
-                                            });
+                                            if (colorMode === 'target' && lastTargets?.pBySite) {
+                                                const arr = lastTargets.pBySite;
+                                                const mn = -0.1, mx = 0.1;
+                                                voronoiFacesGroup.children.forEach((mesh)=>{
+                                                    const sid = mesh.userData?.siteId;
+                                                    if (sid === undefined) return;
+                                                    const val = arr[sid] || 0;
+                                                    const t = Math.max(0, Math.min(1, (val - mn) / (mx - mn)));
+                                                    const col = new THREE.Color().setHSL((1 - t) * 0.33, 0.9, 0.5);
+                                                    if (mesh.material && mesh.material.color) { mesh.material.color.copy(col); mesh.material.needsUpdate = true; }
+                                                });
+                                            } else if (colorMode === 'error' && lastV && lastTargets?.Vtarget) {
+                                                const Vt = lastTargets.Vtarget;
+                                                const scale = 0.5;
+                                                voronoiFacesGroup.children.forEach((mesh)=>{
+                                                    const sid = mesh.userData?.siteId;
+                                                    if (sid === undefined) return;
+                                                    const e = ((Vt[sid]||0) - (lastV[sid]||0));
+                                                    const v = Math.max(-1, Math.min(1, e * scale));
+                                                    const t = (v + 1) / 2;
+                                                    const col = new THREE.Color().setHSL((1 - t) * 0.33, 0.9, 0.5);
+                                                    if (mesh.material && mesh.material.color) { mesh.material.color.copy(col); mesh.material.needsUpdate = true; }
+                                                });
+                                            }
                                         }
                                     } catch {}
                                 }
