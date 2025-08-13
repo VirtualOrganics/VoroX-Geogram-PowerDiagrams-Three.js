@@ -489,10 +489,14 @@
     </div>
     
     <script src="../../public/wasm/periodic_delaunay.js"></script>
+    <script src="../../public/wasm/regular_triangulation.js"></script>
     <script>
         // Make module available on window for compatibility
         if (typeof PeriodicDelaunayModule !== 'undefined' && typeof window.PeriodicDelaunayModule === 'undefined') {
             window.PeriodicDelaunayModule = PeriodicDelaunayModule;
+        }
+        if (typeof RegularTriangulationModule !== 'undefined' && typeof window.RegularTriangulationModule === 'undefined') {
+            window.RegularTriangulationModule = RegularTriangulationModule;
         }
     </script>
     <script type="module">
@@ -2305,7 +2309,8 @@
                         const N = Math.max(1, Math.min(50, parseInt(document.getElementById('physItersPerBrain')?.value || '8')));
                         const eta = Math.max(0.0001, Math.min(1, parseFloat((document.getElementById('weightEta')?.value || '0.02'))));
                         const wClamp = Math.max(0, Math.min(1, parseFloat((document.getElementById('weightClamp')?.value || '0.02'))));
-                        const pd = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: (document.getElementById('powerBackend')?.value || 'numeric') });
+                        const selectedBackend = (document.getElementById('powerBackend')?.value || 'numeric');
+                        const pd = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: selectedBackend });
                         if (!weights || weights.length !== (pd.Vcurrent?.length||0)) {
                             weights = initWeights(pd.Vcurrent.length||0);
                         }
@@ -2314,10 +2319,11 @@
                             setStatus('Physical: waiting for Brain targets…', true);
                         } else {
                             for (let i = 0; i < N; i++) {
-                                const cur = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: (document.getElementById('powerBackend')?.value || 'numeric') });
+                                const cur = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: selectedBackend });
                                 updateWeights({ weights, Vcurrent: cur.Vcurrent, Vtarget: lastTargets.Vtarget, stepSize: eta, wClamp });
                             }
-                            setStatus(`Physical (weights): N=${N}, η=${eta}`, true);
+                            let backendNote = pd.mode === 'numeric-tet' ? ' — Backend: numeric (geogram unavailable)' : '';
+                            setStatus(`Physical (weights): N=${N}, η=${eta}${backendNote}`, true);
                         }
                         physStepsSinceBrain++;
                         runPhase = 'physical';
