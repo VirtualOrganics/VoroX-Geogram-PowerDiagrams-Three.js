@@ -163,31 +163,12 @@
             </div>
         </div>
         <!-- Basic Physics Parameters -->
-        <div class="control-group slider-group" title="Time step for physics integration">
-            <label for="dynDt">dt (Time Step)</label>
-            <input type="range" id="dynDt" min="0.001" max="0.1" step="0.001" value="0.02">
-            <input type="number" id="dynDtNum" min="0.001" max="0.1" step="0.001" value="0.02">
-        </div>
-        <div class="control-group slider-group" title="Force multiplier for all dynamics">
-            <label for="dynEnergy">Energy</label>
-            <input type="range" id="dynEnergy" min="0.00001" max="0.001" step="0.00001" value="0.0005">
-            <input type="number" id="dynEnergyNum" min="0.00001" max="0.001" step="0.00001" value="0.0005">
-        </div>
-        <div class="control-group slider-group" title="Target edge length for equilibration">
-            <label for="dynScale">Scale</label>
-            <input type="range" id="dynScale" min="0.1" max="2.0" step="0.05" value="0.5">
-            <input type="number" id="dynScaleNum" min="0.1" max="2.0" step="0.05" value="0.5">
-        </div>
-        <div class="control-group row-2">
-            <div class="inline-pair" title="Apply forces to edges vs centers"><input type="checkbox" id="dynEdgeScale" checked><label>Edge Scale</label></div>
-            <div class="inline-pair" title="Enable basic equilibration forces"><input type="checkbox" id="dynEquilibration" checked><label>Equilibration</label></div>
-        </div>
+        <!-- legacy dynamics controls removed -->
         
         <!-- PageRank System Controls -->
         <div class="section-header">Edge PageRank System</div>
         <div class="control-group row-2">
-            <div class="inline-pair" title="Use edge-based PageRank instead of tetrahedra"><input type="checkbox" id="dynUseEdgeMode"><label>Edge PageRank</label></div>
-            <div class="inline-pair" title="Use Verlet integration for stability"><input type="checkbox" id="dynUseVerlet"><label>Verlet Integration</label></div>
+            <div class="inline-pair" title="Use edge-based PageRank or MC"><input type="checkbox" id="dynUseEdgeMode" checked><label>Edge Scoring</label></div>
         </div>
         <div class="control-group slider-group" title="PageRank iterations (higher = more accurate)">
             <label for="dynSearchDepth">Search Depth</label>
@@ -203,11 +184,7 @@
             <div class="inline-pair" title="Contract faces with score < threshold"><input type="checkbox" id="dynContractive"><label>Contractive</label></div>
             <div class="inline-pair" title="Expand faces with score > threshold"><input type="checkbox" id="dynExpansive"><label>Expansive</label></div>
         </div>
-        <div class="control-group slider-group" title="Velocity damping for Verlet integration">
-            <label for="dynDamping">Damping</label>
-            <input type="range" id="dynDamping" min="0.8" max="1.0" step="0.01" value="0.99">
-            <input type="number" id="dynDampingNum" min="0.8" max="1.0" step="0.01" value="0.99">
-        </div>
+        <!-- verlet damping removed -->
 
         <!-- Two-Phase Cadence + XPBD Guard -->
         <div class="section-header">Two-Phase Cadence + XPBD</div>
@@ -215,26 +192,7 @@
             <label for="physPerBrain">Physics per Brain</label>
             <input type="number" id="physPerBrain" min="1" max="50" step="1" value="10">
         </div>
-        <div class="control-group row-2" title="Retriangulate every N Physical steps (testing)">
-            <label for="retriEvery">Retriangulate every</label>
-            <input type="number" id="retriEvery" min="1" max="10000" step="1" value="999">
-        </div>
-        <div class="control-group row-2" title="Max per-face scale change per Physical step (XPBD)">
-            <label for="xpbdMaxScale">Max face scale/step</label>
-            <input type="number" id="xpbdMaxScale" min="0" max="0.5" step="0.01" value="0.10">
-        </div>
-        <div class="control-group row-2" title="Strength g: scales per-face percentage change">
-            <label for="xpbdStrength">Strength (g)</label>
-            <input type="number" id="xpbdStrength" min="0" max="1" step="0.001" value="0.001">
-        </div>
-        <div class="control-group row-2" title="Shaping exponent γ: curve response vs |s−t| (1.0 = linear)">
-            <label for="xpbdGamma">Shaping (γ)</label>
-            <input type="number" id="xpbdGamma" min="0.25" max="3" step="0.05" value="1.0">
-        </div>
-        <div class="control-group row-2" title="Invert XPBD response: treat (score - threshold) as negative">
-            <label for="xpbdInvert">Inverse (XPBD)</label>
-            <input type="checkbox" id="xpbdInvert">
-        </div>
+        <!-- xpbd ui removed; power controls below -->
         <div class="control-group row-2" title="Minimum milliseconds between Brain recomputes (0 = none)">
             <label for="brainCooldownMs">Brain cooldown (ms)</label>
             <input type="number" id="brainCooldownMs" min="0" max="1000" step="10" value="0">
@@ -509,7 +467,7 @@
         import { DelaunayComputation } from '../../src/js/DelaunayComputation.js';
         import { createVoroX } from '../../src/js/VoroXAdapter.js';
         import { barycenter } from '../../src/js/vorox2/core.js';
-        import { calculateScores, calculateEdgeScores, calculateEdgeScoresMonteCarlo, gradient, integratePoints, createVerletSystem } from '../../src/js/vorox2/dynamics.js';
+        import { calculateEdgeScores, calculateEdgeScoresMonteCarlo } from '../../src/js/vorox2/dynamics.js';
         import { computeCellTargets } from '../../src/js/power/targetVolumes.js';
         import { initWeights, updateWeights } from '../../src/js/power/weights.js';
         import { buildPowerDiagram } from '../../src/js/power/diagram.js';
@@ -1786,7 +1744,7 @@
             const periodic = document.getElementById('periodicMode').checked;
             const centering = document.getElementById('voronoiMethod').value || 'circumcenter';
             voroxInstance = await createVoroX({ Module, points: currentPoints, periodic, centering });
-            scores = calculateScores(voroxInstance.getFoam());
+            // legacy calculateScores removed
             
             // Recompute edge scores if coloring is enabled
             if (document.getElementById('colorEdgesByScore').checked) {
@@ -1856,54 +1814,7 @@
             }
         }
         
-        // Centralized dynamics options getter (moved above step for scope/ordering)
-        function getDynamicsOptions() {
-            return {
-                edgeScale: document.getElementById('dynEdgeScale').checked,
-                scale: parseFloat(document.getElementById('dynScaleNum').value),
-                energy: parseFloat(document.getElementById('dynEnergyNum').value),
-                equilibration: document.getElementById('dynEquilibration').checked,
-                contractive: document.getElementById('dynContractive').checked,
-                expansive: document.getElementById('dynExpansive').checked,
-                recomputeEvery: 5,
-                threshold: parseFloat(document.getElementById('dynThresholdNum').value) || 0.5,
-                useEdgeMode: document.getElementById('dynUseEdgeMode').checked,
-                useVerlet: document.getElementById('dynUseVerlet').checked,
-                damping: parseFloat(document.getElementById('dynDampingNum').value) || 0.99
-            };
-        }
-        // TEMP: expose for console validation; remove after verifying
-        window.getDynamicsOptions = getDynamicsOptions;
-
-        function step() {
-            if (!voroxInstance) return;
-            const dt = parseNumInput('dynDt', 0.02);
-            const opts = getDynamicsOptions();
-            const depth = parseInt(document.getElementById('dynSearchDepthNum').value);
-            const foam = voroxInstance.getFoam();
-            
-            // Use edge-based or tetrahedra-based scoring
-            if (opts.useEdgeMode) {
-                // Edge-based PageRank scoring
-                const edgeResult = calculateEdgeScores(foam, depth, 0.85);
-                lastEdgeScores = edgeResult.scores;
-                
-                // Adapter owns integration; pass options (with edge scores)
-                const stepOptions = {
-                    ...opts,
-                    useEdgeMode: true,
-                    edgeScores: lastEdgeScores,
-                    edge_scale: opts.edgeScale
-                };
-                voroxInstance.step(dt, stepOptions, null);
-            } else {
-                // Legacy tetrahedra-based scoring; adapter integrates
-                scores = calculateScores(foam, depth);
-                voroxInstance.step(dt, opts, scores);
-            }
-            
-            updateScene();
-        }
+        // Legacy dynamics/step removed (power-only path)
         
         // Initialize everything
         window.PeriodicDelaunayModule().then(async module => {
@@ -2258,10 +2169,7 @@
             setupSliderSync('dynFPS', 'dynFPSNum');
             setupSliderSync('dynThreshold', 'dynThresholdNum');
             setupSliderSync('dynDecay', 'dynDecayNum');
-            setupSliderSync('dynDt', 'dynDtNum');
-            setupSliderSync('dynEnergy', 'dynEnergyNum');
-            setupSliderSync('dynScale', 'dynScaleNum');
-            setupSliderSync('dynDamping', 'dynDampingNum');
+            // legacy slider syncs removed
             setupSliderSync('voroxMaxSegs', 'voroxMaxSegsNum');
             
             let frameCounter = 0;
@@ -2293,8 +2201,8 @@
                 lastTickTime = now - (delta % frameInterval);
 
                 // --- Two-Phase Brain/Physical Loop ---
-                const dt = parseFloat(document.getElementById('dynDtNum').value);
-                const options = getDynamicsOptions();
+                // legacy dt removed
+                // dynamics options removed in power-only mode
                 const depth = parseInt(document.getElementById('dynSearchDepthNum').value);
                 const physPerBrain = Math.max(1, Math.min(50, parseInt(document.getElementById('physPerBrain')?.value || '10')));
                 const brainCooldownMs = Math.max(0, parseInt(document.getElementById('brainCooldownMs')?.value || '0'));
@@ -2307,7 +2215,6 @@
                     const canBrain = (brainCooldownMs === 0) || ((nowMs - brainLastTimeMs) >= brainCooldownMs);
                     if (!DISABLE_PHYSICAL && WEIGHT_SOLVER_ENABLED && (physStepsSinceBrain < physPerBrain || !canBrain)) {
                         // Physical step (XPBD enabled)
-                        // Weight-solver physical step
                         const N = Math.max(1, Math.min(50, parseInt(document.getElementById('physItersPerBrain')?.value || '8')));
                         const eta = Math.max(0.0001, Math.min(1, parseFloat((document.getElementById('weightEta')?.value || '0.02'))));
                         const wClamp = Math.max(0, Math.min(1, parseFloat((document.getElementById('weightClamp')?.value || '0.02'))));
@@ -2337,12 +2244,12 @@
                                 try { if (typeof voroxInstance.primeDualCaches === 'function') voroxInstance.primeDualCaches(); } catch {}
                                 try { if (typeof voroxInstance.clearPrimeOnBrain === 'function') voroxInstance.clearPrimeOnBrain(); } catch {}
                             }
-                            const foam = voroxInstance.getFoam();
-                            const foamHash = (typeof buildFoamHash === 'function') ? buildFoamHash(foam) : 0;
+                             const foam = voroxInstance.getFoam();
+                             const foamHash = (typeof buildFoamHash === 'function') ? buildFoamHash(foam) : 0;
                             const useMC = document.getElementById('scoreModeMC').checked;
                             const paramsNow = useMC
                                 ? { L: Math.max(2, Math.min(32, parseInt(document.getElementById('mcStepsL').value || 12))), K: Math.round(Math.max(8, Math.min(256, parseInt(document.getElementById('mcWalkersK').value || 64)))/8)*8, alpha: Math.max(0.75, Math.min(0.98, parseFloat((document.getElementById('mcAlpha').value || '0.90').toString().replace(',', '.')))) }
-                                : { depth, damping: 0.85 };
+                                 : { depth, damping: 0.85 };
                             const methodNow = useMC ? 'mc' : 'pagerank';
                             const sSig = `${foamHash}|${methodNow}|${JSON.stringify(paramsNow)}`;
 
@@ -2445,7 +2352,7 @@
                     }
                 } else {
                     // Legacy (tet-based); keep behavior
-                    scores = calculateScores(voroxInstance.getFoam(), depth);
+                    // legacy calculateScores removed
                     g = voroxInstance.step(dt, options, scores);
                     runPhase = 'physical';
                 }
@@ -2661,8 +2568,7 @@
             // Hide/show Verlet controls based on XPBD usage
             function updateVerletVisibility() {
                 const useXPBD = !!document.getElementById('dynUseEdgeMode').checked; // XPBD only in edge mode
-                const verletRow = document.getElementById('dynDamping')?.closest('.control-group');
-                const verletChk = document.getElementById('dynUseVerlet')?.closest('.inline-pair');
+                // legacy verlet controls removed
                 if (verletRow) verletRow.style.display = useXPBD ? 'none' : '';
                 if (verletChk) verletChk.style.display = useXPBD ? 'none' : '';
             }
