@@ -2294,7 +2294,8 @@
                                     const contractive = !!document.getElementById('dynContractive')?.checked;
                                     const expansive = !!document.getElementById('dynExpansive')?.checked;
                                     const foam = voroxInstance.getFoam();
-                                    lastTargets = computeCellTargets({ edgeScores: lastEdgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam });
+                                    const cur = await buildPowerDiagram({ foam, weights, backend: (document.getElementById('powerBackend')?.value || 'numeric') });
+                                    lastTargets = computeCellTargets({ edgeScores: lastEdgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam, VcurrentSite: cur.Vcurrent });
                                 } catch (e) { console.warn('Target computation failed:', e); }
                                 return;
                             }

@@ -22,20 +22,15 @@ function tetVolume(points, tet, isPeriodic) {
   return Math.abs(dot) / 6.0;
 }
 
-export function computeCellTargets({ edgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam }) {
-  const numTets = foam.simplices.length;
-  const sum = new Float64Array(numTets);
-  const cnt = new Uint32Array(numTets);
-  const pByTet = new Float32Array(numTets);
-  const Vcurrent = new Float64Array(numTets);
+export function computeCellTargets({ edgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam, VcurrentSite }) {
+  const numSites = foam.points.length;
+  const sum = new Float64Array(numSites);
+  const cnt = new Uint32Array(numSites);
+  const pBySite = new Float32Array(numSites);
 
-  // Precompute current volumes per tet
-  for (let t = 0; t < numTets; t++) {
-    Vcurrent[t] = tetVolume(foam.points, foam.simplices[t], !!foam.isPeriodic);
-  }
-
-  // Accumulate contributions from voronoi edges (between adjacent tets)
+  // Accumulate contributions per site via shared face for each Voronoi edge
   const edges = foam.voronoiEdges || [];
+  const edgeToFace = foam.voronoiEdgeToDelaunayFace || new Map();
   for (let i = 0; i < edges.length; i++) {
     const t1 = edges[i][0] | 0;
     const t2 = edges[i][1] | 0;
@@ -45,24 +40,29 @@ export function computeCellTargets({ edgeScores, threshold, invert, contractive,
     if (contractive && r >= 0) continue;
     if (expansive && r <= 0) continue;
     const contrib = Math.sign(r) * Math.pow(Math.abs(r), (gamma ?? 1.0));
-    sum[t1] += contrib; cnt[t1] += 1;
-    sum[t2] += contrib; cnt[t2] += 1;
+    const face = edgeToFace.get(key);
+    if (face && face.length === 3) {
+      const i0 = face[0]|0, i1 = face[1]|0, i2 = face[2]|0;
+      sum[i0] += contrib; cnt[i0] += 1;
+      sum[i1] += contrib; cnt[i1] += 1;
+      sum[i2] += contrib; cnt[i2] += 1;
+    }
   }
 
-  // Map to per-tet signed factor and targets
-  const Vtarget = new Float64Array(numTets);
+  // Map to per-site signed factor and targets
+  const Vtarget = new Float64Array(numSites);
   const g = Number(strength ?? 0.05);
   const maxScale = Math.max(0, Number(maxCellScale ?? 0.10));
-  for (let t = 0; t < numTets; t++) {
-    const rt = cnt[t] ? (sum[t] / cnt[t]) : 0;
+  for (let i = 0; i < numSites; i++) {
+    const rt = cnt[i] ? (sum[i] / cnt[i]) : 0;
     const rtClamped = clamp(rt, -1, 1);
     const pt = clamp(g * rtClamped, -maxScale, maxScale);
-    pByTet[t] = pt;
-    const Vc = Vcurrent[t];
-    Vtarget[t] = Vc * (1 + pt);
+    pBySite[i] = pt;
+    const Vc = (VcurrentSite && isFinite(VcurrentSite[i])) ? VcurrentSite[i] : 1.0;
+    Vtarget[i] = Vc * (1 + pt);
   }
 
-  return { pByTet, Vtarget };
+  return { pBySite, Vtarget };
 }
 
 
