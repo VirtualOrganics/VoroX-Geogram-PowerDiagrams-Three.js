@@ -2265,7 +2265,7 @@
             let frameCounter = 0;
             let lastTickTime = performance.now();
 
-            function tick() {
+            async function tick() {
                 if (!runOn) return;
 
                 const maxFramesEl = document.getElementById('dynMaxFramesNum');
