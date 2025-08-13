@@ -242,6 +242,13 @@
 
         <!-- Power weights controls (Part 2) -->
         <div class="section-header">Power Diagram Weights</div>
+        <div class="control-group row-2" title="Choose backend for power diagram volumes">
+            <label for="powerBackend">Backend</label>
+            <select id="powerBackend">
+                <option value="geogram">Geogram power</option>
+                <option value="numeric" selected>Numeric (slow)</option>
+            </select>
+        </div>
         <div class="control-group row-2" title="Max per-cell scale change per Brain (targets)">
             <label for="maxCellScalePerBrain">Max cell scale</label>
             <input type="number" id="maxCellScalePerBrain" min="0" max="0.5" step="0.01" value="0.10">
@@ -345,6 +352,10 @@
             <label for="dynFPS">FPS Limit</label>
             <input type="range" id="dynFPS" min="5" max="60" step="1" value="30">
             <input type="number" id="dynFPSNum" min="5" max="60" step="1" value="30">
+        </div>
+        <div class="control-group row-2">
+            <div class="inline-pair" title="Auto-tune cadence based on Brain ms"><input type="checkbox" id="autoCadence"><label>Auto cadence</label></div>
+            <div class="inline-pair" title="Show current physPerBrain and Brain avg ms"><span id="cadenceInfo" style="font-size:12px;opacity:0.8"></span></div>
         </div>
          <div class="control-group">
             <div class="inline-pair" title="Show periodic ghost cells"><input type="checkbox" id="showGhostCells"><label>Ghost Cells</label></div>
@@ -529,7 +540,7 @@
         let overlayEl = null;         // overlay element for long-running computes
         // Disable Physical step for Power-Diagram Part 1 scaffold
         // Physical actuation (XPBD) is disabled; we only run Brain scoring/legend
-        const DISABLE_PHYSICAL = true;
+        const DISABLE_PHYSICAL = false;
         // Re-enable physical in Part 2
         const WEIGHT_SOLVER_ENABLED = true;
         
@@ -1961,9 +1972,25 @@
                     brainInFlight = false;
                     pendingSig = null;
                     brainLastTimeMs = performance.now();
+                    // moving average
+                    if (typeof runtimeMs === 'number') {
+                      brainAvgMs = brainAvgMs ? (0.8*brainAvgMs + 0.2*runtimeMs) : runtimeMs;
+                    }
                     physStepsSinceBrain = 0;
                     overlayEl.style.display = 'none';
                     setStatus(`Brain ${runtimeMs?.toFixed ? runtimeMs.toFixed(1) : runtimeMs} ms — bins ${map.size}${stats?`, var ${Number(stats.variance||0).toFixed(4)}`:''}`, true);
+                    // Compute per-cell targets on worker return
+                    try {
+                        const strength = Math.max(0, Math.min(1, parseFloat((document.getElementById('xpbdStrength')?.value || '0.05'))));
+                        const gamma = Math.max(0.1, Math.min(4, parseFloat((document.getElementById('xpbdGamma')?.value || '1.0'))));
+                        const maxCellScale = Math.max(0, Math.min(0.5, parseFloat((document.getElementById('maxCellScalePerBrain')?.value || '0.10'))));
+                        const invert = !!document.getElementById('xpbdInvert')?.checked;
+                        const threshold = Math.max(0, Math.min(1, parseFloat((document.getElementById('dynThresholdNum')?.value || '0.5'))));
+                        const contractive = !!document.getElementById('dynContractive')?.checked;
+                        const expansive = !!document.getElementById('dynExpansive')?.checked;
+                        const foam = voroxInstance.getFoam();
+                        lastTargets = computeCellTargets({ edgeScores: lastEdgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam });
+                    } catch (e) { console.warn('Target computation failed:', e); }
                     renderLegend();
                 };
                 brainWorker.onerror = () => {
@@ -2106,6 +2133,12 @@
                 }
                 
                 overlayEl.style.display = 'none';
+                const infoEl = document.getElementById('cadenceInfo');
+                if (infoEl) {
+                    const ppb = document.getElementById('physPerBrain')?.value || '10';
+                    const bm = (typeof brainAvgMs==='number' && isFinite(brainAvgMs)) ? brainAvgMs.toFixed(1) : '–';
+                    infoEl.textContent = `phys/brain=${ppb}, brain≈${bm}ms`;
+                }
                 updateScene();
                 renderLegend();
             });
@@ -2272,7 +2305,7 @@
                         const N = Math.max(1, Math.min(50, parseInt(document.getElementById('physItersPerBrain')?.value || '8')));
                         const eta = Math.max(0.0001, Math.min(1, parseFloat((document.getElementById('weightEta')?.value || '0.02'))));
                         const wClamp = Math.max(0, Math.min(1, parseFloat((document.getElementById('weightClamp')?.value || '0.02'))));
-                        const pd = buildPowerDiagram({ foam: voroxInstance.getFoam() });
+                        const pd = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: (document.getElementById('powerBackend')?.value || 'numeric') });
                         if (!weights || weights.length !== (pd.Vcurrent?.length||0)) {
                             weights = initWeights(pd.Vcurrent.length||0);
                         }
@@ -2281,7 +2314,7 @@
                             setStatus('Physical: waiting for Brain targets…', true);
                         } else {
                             for (let i = 0; i < N; i++) {
-                                const cur = buildPowerDiagram({ foam: voroxInstance.getFoam() });
+                                const cur = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: (document.getElementById('powerBackend')?.value || 'numeric') });
                                 updateWeights({ weights, Vcurrent: cur.Vcurrent, Vtarget: lastTargets.Vtarget, stepSize: eta, wClamp });
                             }
                             setStatus(`Physical (weights): N=${N}, η=${eta}`, true);
@@ -2376,6 +2409,15 @@
                             console.error('Brain slot error:', e);
                             setStatus('Brain slot error', false);
                             // No physical fallback in Part 1
+                        }
+                        // Cadence auto-tune (optional): adjust physPerBrain by brainAvgMs budget
+                        const auto = document.getElementById('autoCadence')?.checked;
+                        if (auto && typeof brainAvgMs === 'number' && isFinite(brainAvgMs)) {
+                            const budgetMs = 25;
+                            let ppb = parseInt(document.getElementById('physPerBrain')?.value || '10');
+                            if (brainAvgMs > budgetMs && ppb < 50) ppb += 1;
+                            else if (brainAvgMs < budgetMs*0.6 && ppb > 1) ppb -= 1;
+                            document.getElementById('physPerBrain').value = String(ppb);
                         }
                     }
                 } else {
