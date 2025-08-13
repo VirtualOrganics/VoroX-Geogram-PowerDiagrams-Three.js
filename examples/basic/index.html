@@ -503,6 +503,7 @@
         let lastEdgeScores = null;    // Cached edge scores (PR or MC)
         let weights = null;           // Per-cell weights for power diagram
         let lastTargets = null;       // Cached Vtarget from Brain
+        let lastPowerVolumes = null;  // Cached Vcurrent per-site from last power eval
         let lastScoreMethod = null;   // 'pagerank' | 'mc'
         let lastScoreParams = null;   // params used for last compute
         let lastScoreTimestamp = null;// Date.now()
@@ -1127,10 +1128,34 @@
                         return out;
                     });
                     const geom = new ConvexGeometry(adjusted);
-                const color = facesColorByScore ? scoreToColor(scores[cellData[0].tetId]) : new THREE.Color(faceColorHex);
+                    const color = facesColorByScore ? scoreToColor(scores[cellData[0].tetId]) : new THREE.Color(faceColorHex);
                     const mat = new THREE.MeshPhongMaterial({ color, opacity: faceOpacity, transparent: true, side: THREE.DoubleSide, depthWrite: false });
                     voronoiFacesGroup.add(new THREE.Mesh(geom, mat));
                 });
+                // Apply power-based coloring if selected
+                try {
+                    const modeSel = document.getElementById('colorBy');
+                    const mode = modeSel ? modeSel.value : 'score';
+                    if (mode === 'target' && lastTargets?.pBySite && voronoiFacesGroup.children.length) {
+                        const arr = lastTargets.pBySite;
+                        const mn = -0.1, mx = 0.1;
+                        voronoiFacesGroup.children.forEach((mesh, idx)=>{
+                            const t = Math.max(0, Math.min(1, ((arr[idx%arr.length]||0)-mn)/(mx-mn)));
+                            const col = new THREE.Color().setHSL((1-t)*0.33, 0.9, 0.5);
+                            mesh.material.color.copy(col);
+                        });
+                    } else if (mode === 'error' && lastPowerVolumes && lastTargets?.Vtarget && voronoiFacesGroup.children.length) {
+                        const Vt = lastTargets.Vtarget;
+                        voronoiFacesGroup.children.forEach((mesh, idx)=>{
+                            const s = idx % lastPowerVolumes.length;
+                            const e = (Vt[s]||0) - (lastPowerVolumes[s]||0);
+                            const v = Math.max(-1, Math.min(1, e));
+                            const t = (v+1)/2;
+                            const col = new THREE.Color().setHSL((1-t)*0.33, 0.9, 0.5);
+                            mesh.material.color.copy(col);
+                        });
+                    }
+                } catch {}
             }
 
             if (showFlow) {
@@ -2247,6 +2272,7 @@
                             for (let i = 0; i < N; i++) {
                                 const cur = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: selectedBackend });
                                 lastV = cur.Vcurrent;
+                                lastPowerVolumes = cur.Vcurrent;
                                 updateWeights({ weights, Vcurrent: cur.Vcurrent, Vtarget: lastTargets.Vtarget, stepSize: eta, wClamp });
                                 // Step 1: fast visibility — color by target or error
                                 const colorMode = (document.getElementById('colorBy')?.value || 'score');
