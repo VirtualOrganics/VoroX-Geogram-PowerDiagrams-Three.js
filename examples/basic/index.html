@@ -211,6 +211,14 @@
             <label for="maxCellScalePerBrain">Max cell scale</label>
             <input type="number" id="maxCellScalePerBrain" min="0" max="0.5" step="0.01" value="0.10">
         </div>
+        <div class="control-group row-2" title="Strength g: scales per-cell percentage change per Brain">
+            <label for="xpbdStrength">Strength (g)</label>
+            <input type="number" id="xpbdStrength" min="0" max="1" step="0.001" value="0.05">
+        </div>
+        <div class="control-group row-2" title="Shaping exponent γ: curve response vs |s−t| (1.0 = linear)">
+            <label for="xpbdGamma">Shaping (γ)</label>
+            <input type="number" id="xpbdGamma" min="0.25" max="3" step="0.05" value="1.0">
+        </div>
         <div class="control-group row-2" title="Weight step size per iteration">
             <label for="weightEta">η (weight step)</label>
             <input type="number" id="weightEta" min="0.001" max="0.2" step="0.001" value="0.02">
