@@ -1964,7 +1964,11 @@
                 brainWorker.onmessage = (ev) => {
                     const { foamHash, method, params, runtimeMs, scores, stats } = ev.data || {};
                     const sig = `${foamHash}|${method}|${JSON.stringify(params)}`;
-                    if (!pendingSig || sig !== pendingSig) return; // stale response
+                    // Always clear overlay/flight to avoid spinner lock, even on stale
+                    if (overlayEl) overlayEl.style.display = 'none';
+                    brainInFlight = false;
+                    const isStale = (!pendingSig || sig !== pendingSig);
+                    if (isStale) { pendingSig = null; return; }
                     const map = new Map();
                     if (scores && scores.keys && scores.values) {
                         for (let i = 0; i < scores.keys.length; i++) {
@@ -1973,7 +1977,6 @@
                     }
                     lastEdgeScores = map;
                     lastBrainSig = pendingSig;
-                    brainInFlight = false;
                     pendingSig = null;
                     brainLastTimeMs = performance.now();
                     // moving average
@@ -1981,7 +1984,6 @@
                       brainAvgMs = brainAvgMs ? (0.8*brainAvgMs + 0.2*runtimeMs) : runtimeMs;
                     }
                     physStepsSinceBrain = 0;
-                    overlayEl.style.display = 'none';
                     setStatus(`Brain ${runtimeMs?.toFixed ? runtimeMs.toFixed(1) : runtimeMs} ms — bins ${map.size}${stats?`, var ${Number(stats.variance||0).toFixed(4)}`:''}`, true);
                     // Compute per-cell targets on worker return
                     try {
@@ -2408,6 +2410,21 @@
                                 pendingSig = sSig;
                                 if (overlayEl) overlayEl.style.display = 'flex';
                                 brainWorker.postMessage({ foamHash, method: methodNow, params: paramsNow, foamData });
+                                // Watchdog: if worker exceeds 7s, fallback to main thread PR and clear overlay
+                                setTimeout(() => {
+                                    if (brainInFlight && pendingSig === sSig) {
+                                        try {
+                                            const foam2 = voroxInstance.getFoam();
+                                            const prDepth = Math.max(5, Math.min(20, (paramsNow?.depth||15)));
+                                            const edgeResult2 = calculateEdgeScores(foam2, prDepth, 0.85);
+                                            lastEdgeScores = edgeResult2.scores;
+                                            lastBrainSig = sSig; brainLastTimeMs = performance.now(); physStepsSinceBrain = 0;
+                                            setStatus('Brain (timeout) — fell back to main thread PR', false);
+                                        } catch {}
+                                        if (overlayEl) overlayEl.style.display = 'none';
+                                        brainInFlight = false; pendingSig = null;
+                                    }
+                                }, 7000);
                                 setStatus('Brain (started)', true);
                                 return;
                             }
