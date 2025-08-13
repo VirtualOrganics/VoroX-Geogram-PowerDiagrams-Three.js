@@ -1,0 +1,68 @@
+// Compute per-tet target volume factors based on Voronoi edge scores
+// This is a Brain-side aggregation that maps edge scores to cells (tets)
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function tetVolume(points, tet, isPeriodic) {
+  // Basic unsigned volume for a tetrahedron defined by 4 vertices
+  // If periodic, we still use direct coordinates for Part 2 scaffold
+  const a = points[tet[0]];
+  const b = points[tet[1]];
+  const c = points[tet[2]];
+  const d = points[tet[3]];
+  const ab = [b[0]-a[0], b[1]-a[1], b[2]-a[2]];
+  const ac = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
+  const ad = [d[0]-a[0], d[1]-a[1], d[2]-a[2]];
+  const cx = ab[1]*ac[2] - ab[2]*ac[1];
+  const cy = ab[2]*ac[0] - ab[0]*ac[2];
+  const cz = ab[0]*ac[1] - ab[1]*ac[0];
+  const dot = cx*ad[0] + cy*ad[1] + cz*ad[2];
+  return Math.abs(dot) / 6.0;
+}
+
+export function computeCellTargets({ edgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam }) {
+  const numTets = foam.simplices.length;
+  const sum = new Float64Array(numTets);
+  const cnt = new Uint32Array(numTets);
+  const pByTet = new Float32Array(numTets);
+  const Vcurrent = new Float64Array(numTets);
+
+  // Precompute current volumes per tet
+  for (let t = 0; t < numTets; t++) {
+    Vcurrent[t] = tetVolume(foam.points, foam.simplices[t], !!foam.isPeriodic);
+  }
+
+  // Accumulate contributions from voronoi edges (between adjacent tets)
+  const edges = foam.voronoiEdges || [];
+  for (let i = 0; i < edges.length; i++) {
+    const t1 = edges[i][0] | 0;
+    const t2 = edges[i][1] | 0;
+    const key = t1 < t2 ? `${t1}-${t2}` : `${t2}-${t1}`;
+    const s = edgeScores?.get ? (edgeScores.get(key) || 0) : 0;
+    let r = invert ? (threshold - s) : (s - threshold);
+    if (contractive && r >= 0) continue;
+    if (expansive && r <= 0) continue;
+    const contrib = Math.sign(r) * Math.pow(Math.abs(r), (gamma ?? 1.0));
+    sum[t1] += contrib; cnt[t1] += 1;
+    sum[t2] += contrib; cnt[t2] += 1;
+  }
+
+  // Map to per-tet signed factor and targets
+  const Vtarget = new Float64Array(numTets);
+  const g = Number(strength ?? 0.05);
+  const maxScale = Math.max(0, Number(maxCellScale ?? 0.10));
+  for (let t = 0; t < numTets; t++) {
+    const rt = cnt[t] ? (sum[t] / cnt[t]) : 0;
+    const rtClamped = clamp(rt, -1, 1);
+    const pt = clamp(g * rtClamped, -maxScale, maxScale);
+    pByTet[t] = pt;
+    const Vc = Vcurrent[t];
+    Vtarget[t] = Vc * (1 + pt);
+  }
+
+  return { pByTet, Vtarget };
+}
+
+

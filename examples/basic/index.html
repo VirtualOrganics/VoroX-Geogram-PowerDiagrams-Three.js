@@ -239,6 +239,25 @@
             <label for="brainCooldownMs">Brain cooldown (ms)</label>
             <input type="number" id="brainCooldownMs" min="0" max="1000" step="10" value="0">
         </div>
+
+        <!-- Power weights controls (Part 2) -->
+        <div class="section-header">Power Diagram Weights</div>
+        <div class="control-group row-2" title="Max per-cell scale change per Brain (targets)">
+            <label for="maxCellScalePerBrain">Max cell scale</label>
+            <input type="number" id="maxCellScalePerBrain" min="0" max="0.5" step="0.01" value="0.10">
+        </div>
+        <div class="control-group row-2" title="Weight step size per iteration">
+            <label for="weightEta">η (weight step)</label>
+            <input type="number" id="weightEta" min="0.001" max="0.2" step="0.001" value="0.02">
+        </div>
+        <div class="control-group row-2" title="Clamp for per-iteration weight change">
+            <label for="weightClamp">wClamp</label>
+            <input type="number" id="weightClamp" min="0" max="0.2" step="0.001" value="0.02">
+        </div>
+        <div class="control-group row-2" title="Physical iterations per Brain phase">
+            <label for="physItersPerBrain">Iterations per Brain</label>
+            <input type="number" id="physItersPerBrain" min="1" max="50" step="1" value="8">
+        </div>
         
         <!-- PageRank Edge Coloring System -->
         <hr>
@@ -476,6 +495,9 @@
         import { createVoroX } from '../../src/js/VoroXAdapter.js';
         import { barycenter } from '../../src/js/vorox2/core.js';
         import { calculateScores, calculateEdgeScores, calculateEdgeScoresMonteCarlo, gradient, integratePoints, createVerletSystem } from '../../src/js/vorox2/dynamics.js';
+        import { computeCellTargets } from '../../src/js/power/targetVolumes.js';
+        import { initWeights, updateWeights } from '../../src/js/power/weights.js';
+        import { buildPowerDiagram } from '../../src/js/power/diagram.js';
         import PoissonDiskSampling from "https://esm.sh/poisson-disk-sampling@2.3.0";
         
         let scene, camera, renderer, controls;
@@ -490,6 +512,8 @@
         let scores = [];
         let verletIntegrator = null;  // Verlet physics integrator
         let lastEdgeScores = null;    // Cached edge scores (PR or MC)
+        let weights = null;           // Per-cell weights for power diagram
+        let lastTargets = null;       // Cached Vtarget from Brain
         let lastScoreMethod = null;   // 'pagerank' | 'mc'
         let lastScoreParams = null;   // params used for last compute
         let lastScoreTimestamp = null;// Date.now()
@@ -506,6 +530,8 @@
         // Disable Physical step for Power-Diagram Part 1 scaffold
         // Physical actuation (XPBD) is disabled; we only run Brain scoring/legend
         const DISABLE_PHYSICAL = true;
+        // Re-enable physical in Part 2
+        const WEIGHT_SOLVER_ENABLED = true;
         
         // Discrete color mapping cache/state
         let colorSteps = 5;
@@ -2240,26 +2266,26 @@
                     // Edge mode with cadence
                     const nowMs = performance.now();
                     const canBrain = (brainCooldownMs === 0) || ((nowMs - brainLastTimeMs) >= brainCooldownMs);
-                    if (!DISABLE_PHYSICAL && (physStepsSinceBrain < physPerBrain || !canBrain)) {
+                    if (!DISABLE_PHYSICAL && WEIGHT_SOLVER_ENABLED && (physStepsSinceBrain < physPerBrain || !canBrain)) {
                         // Physical step (XPBD enabled)
-                        const stepOptions = {
-                            ...options,
-                            useEdgeMode: true,
-                            useXPBD: true,
-                            edgeScores: lastEdgeScores,
-                            edge_scale: options.edgeScale,
-                            xpbdMaxScale: Math.max(0, Math.min(0.5, parseFloat(document.getElementById('xpbdMaxScale')?.value || '0.08'))),
-                            xpbdInvert: !!document.getElementById('xpbdInvert')?.checked
-                        };
-                        // Inject refined XPBD controls
-                        stepOptions.xpbdStrength = Math.max(0, Math.min(1, parseFloat(document.getElementById('xpbdStrength')?.value || '0.05')));
-                        stepOptions.xpbdGamma = Math.max(0.25, Math.min(3, parseFloat(document.getElementById('xpbdGamma')?.value || '1.0')));
-                        // Temporarily control retriangulation cadence for stability testing
-                        stepOptions.recomputeEvery = Math.max(1, Math.min(10000, parseInt(document.getElementById('retriEvery')?.value || '999')));
-                        if (!lastEdgeScores || lastEdgeScores.size === 0) {
-                            setStatus('Waiting for Brain scores… running equilibration only', true);
+                        // Weight-solver physical step
+                        const N = Math.max(1, Math.min(50, parseInt(document.getElementById('physItersPerBrain')?.value || '8')));
+                        const eta = Math.max(0.0001, Math.min(1, parseFloat((document.getElementById('weightEta')?.value || '0.02'))));
+                        const wClamp = Math.max(0, Math.min(1, parseFloat((document.getElementById('weightClamp')?.value || '0.02'))));
+                        const pd = buildPowerDiagram({ foam: voroxInstance.getFoam() });
+                        if (!weights || weights.length !== (pd.Vcurrent?.length||0)) {
+                            weights = initWeights(pd.Vcurrent.length||0);
                         }
-                        g = voroxInstance.step(dt, stepOptions, null);
+                        if (!lastTargets) {
+                            // No targets yet; skip
+                            setStatus('Physical: waiting for Brain targets…', true);
+                        } else {
+                            for (let i = 0; i < N; i++) {
+                                const cur = buildPowerDiagram({ foam: voroxInstance.getFoam() });
+                                updateWeights({ weights, Vcurrent: cur.Vcurrent, Vtarget: lastTargets.Vtarget, stepSize: eta, wClamp });
+                            }
+                            setStatus(`Physical (weights): N=${N}, η=${eta}`, true);
+                        }
                         physStepsSinceBrain++;
                         runPhase = 'physical';
                     } else {
@@ -2302,6 +2328,18 @@
                                 lastBrainSig = sSig; brainLastTimeMs = performance.now(); physStepsSinceBrain = 0; runPhase = 'brain';
                                 renderLegend();
                                 setStatus('Brain fallback computed on main thread', true);
+                                // Compute per-cell targets
+                                try {
+                                    const strength = Math.max(0, Math.min(1, parseFloat((document.getElementById('xpbdStrength')?.value || '0.05'))));
+                                    const gamma = Math.max(0.1, Math.min(4, parseFloat((document.getElementById('xpbdGamma')?.value || '1.0'))));
+                                    const maxCellScale = Math.max(0, Math.min(0.5, parseFloat((document.getElementById('maxCellScalePerBrain')?.value || '0.10'))));
+                                    const invert = !!document.getElementById('xpbdInvert')?.checked;
+                                    const threshold = Math.max(0, Math.min(1, parseFloat((document.getElementById('dynThresholdNum')?.value || '0.5'))));
+                                    const contractive = !!document.getElementById('dynContractive')?.checked;
+                                    const expansive = !!document.getElementById('dynExpansive')?.checked;
+                                    const foam = voroxInstance.getFoam();
+                                    lastTargets = computeCellTargets({ edgeScores: lastEdgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam });
+                                } catch (e) { console.warn('Target computation failed:', e); }
                                 return;
                             }
 
