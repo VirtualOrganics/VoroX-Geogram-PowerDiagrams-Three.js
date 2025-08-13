@@ -2291,10 +2291,12 @@
                         } else {
                             let lastV = null;
                             for (let i = 0; i < N; i++) {
-                                const cur = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: selectedBackend });
-                                lastV = cur.Vcurrent;
-                                lastPowerVolumes = cur.Vcurrent;
-                                updateWeights({ weights, Vcurrent: cur.Vcurrent, Vtarget: lastTargets.Vtarget, stepSize: eta, wClamp });
+                                // Evaluate before and after to compute non-zero error
+                                const curBefore = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: selectedBackend });
+                                lastV = curBefore.Vcurrent;
+                                lastPowerVolumes = curBefore.Vcurrent;
+                                updateWeights({ weights, Vcurrent: curBefore.Vcurrent, Vtarget: lastTargets.Vtarget, stepSize: eta, wClamp });
+                                const curAfter = await buildPowerDiagram({ foam: voroxInstance.getFoam(), weights, backend: selectedBackend });
                                 // Step 1: fast visibility — color by target or error
                                 const colorMode = (document.getElementById('colorBy')?.value || 'score');
                                 if (colorMode === 'target' || colorMode === 'error') {
@@ -2330,7 +2332,7 @@
                                             }
                                             // Diagnostics for error stats
                                             try {
-                                                const Ve = lastV.map((v,i)=>(lastTargets?.Vtarget?.[i]||0)-v);
+                                            const Ve = curAfter.Vcurrent.map((v,i)=>(lastTargets?.Vtarget?.[i]||0)-v);
                                                 const elen=Ve.length; const emin=elen?Math.min(...Ve):0; const emax=elen?Math.max(...Ve):0; const emean=elen?(Ve.reduce((a,b)=>a+b,0)/elen):0;
                                                 console.log('[Phys] error len/min/max/mean:', elen, emin.toFixed(4), emax.toFixed(4), emean.toFixed(4));
                                             } catch {}

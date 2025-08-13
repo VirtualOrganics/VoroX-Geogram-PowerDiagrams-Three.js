@@ -37,8 +37,16 @@ export function computeCellTargets({ edgeScores, threshold, invert, contractive,
     const key = t1 < t2 ? `${t1}-${t2}` : `${t2}-${t1}`;
     const s = edgeScores?.get ? (edgeScores.get(key) || 0) : 0;
     let r = invert ? (threshold - s) : (s - threshold);
-    if (contractive && r >= 0) continue;
-    if (expansive && r <= 0) continue;
+    // Gating rules:
+    // - Neither selected: accept both signs
+    // - Only Contractive: accept r < 0
+    // - Only Expansive: accept r > 0
+    // - Both selected: accept both signs
+    if (contractive || expansive) {
+      if (contractive && !expansive && r >= 0) continue;
+      if (expansive && !contractive && r <= 0) continue;
+      // if both true: fall through
+    }
     const contrib = Math.sign(r) * Math.pow(Math.abs(r), (gamma ?? 1.0));
     const face = edgeToFace.get(key);
     if (face && face.length === 3) {
