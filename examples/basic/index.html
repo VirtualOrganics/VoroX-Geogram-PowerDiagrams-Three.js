@@ -1956,7 +1956,18 @@
                         const contractive = !!document.getElementById('dynContractive')?.checked;
                         const expansive = !!document.getElementById('dynExpansive')?.checked;
                         const foam = voroxInstance.getFoam();
-                        lastTargets = computeCellTargets({ edgeScores: lastEdgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam });
+                        const pd0 = await buildPowerDiagram({ foam, weights, backend: (document.getElementById('powerBackend')?.value || 'numeric') });
+                        lastTargets = computeCellTargets({ edgeScores: lastEdgeScores, threshold, invert, contractive, expansive, strength, gamma, maxCellScale, foam, VcurrentSite: pd0?.Vcurrent });
+                        // Diagnostics
+                        try {
+                            const arr = lastTargets?.pBySite || [];
+                            const len = arr.length;
+                            const min = len ? Math.min(...arr) : 0, max = len ? Math.max(...arr) : 0, mean = len ? (arr.reduce((a,b)=>a+b,0)/len) : 0;
+                            console.log('[Brain] pBySite len/min/max/mean:', len, min.toFixed(4), max.toFixed(4), mean.toFixed(4));
+                            const vtLen = lastTargets?.Vtarget?.length || 0;
+                            const vcLen = pd0?.Vcurrent?.length || 0;
+                            console.log('[Brain] lengths sites/p/vt/vc:', foam.points.length, len, vtLen, vcLen);
+                        } catch {}
                     } catch (e) { console.warn('Target computation failed:', e); }
                     renderLegend();
                 };
@@ -2316,6 +2327,12 @@
                                                     if (mesh.material && mesh.material.color) { mesh.material.color.copy(col); mesh.material.needsUpdate = true; }
                                                 });
                                             }
+                                            // Diagnostics for error stats
+                                            try {
+                                                const Ve = lastV.map((v,i)=>(lastTargets?.Vtarget?.[i]||0)-v);
+                                                const elen=Ve.length; const emin=elen?Math.min(...Ve):0; const emax=elen?Math.max(...Ve):0; const emean=elen?(Ve.reduce((a,b)=>a+b,0)/elen):0;
+                                                console.log('[Phys] error len/min/max/mean:', elen, emin.toFixed(4), emax.toFixed(4), emean.toFixed(4));
+                                            } catch {}
                                         }
                                     } catch {}
                                 }
