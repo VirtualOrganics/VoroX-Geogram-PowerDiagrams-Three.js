@@ -23,6 +23,7 @@ self.onmessage = (ev) => {
 
   // Compute scores
   let scoreMap;
+  let usedMethod = method;
   if (method === 'mc') {
     const { L = 12, K = 64, alpha = 0.9 } = params || {};
     const res = calculateEdgeScoresMonteCarlo(foam, L, K, alpha);
@@ -45,6 +46,26 @@ self.onmessage = (ev) => {
   const n = vals.length;
   const mean = n ? vals.reduce((a, b) => a + b, 0) / n : 0;
   const variance = n ? vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n : 0;
+  // If variance is near-zero (flat scores) or empty, fallback to MC to force spread
+  if ((n === 0) || (variance < 1e-6)) {
+    try {
+      const L = 12, K = 32, alpha = 0.9;
+      const res = calculateEdgeScoresMonteCarlo(foam, L, K, alpha);
+      const map2 = res.scores || new Map();
+      const keys2 = [];
+      const vals2 = new Float32Array(map2.size);
+      let j = 0; map2.forEach((v,k)=>{ keys2.push(k); vals2[j++] = v; });
+      self.postMessage({
+        foamHash,
+        method: 'mc',
+        params: { L, K, alpha },
+        runtimeMs: (typeof performance!=='undefined'?performance.now():Date.now()) - t0,
+        scores: { keys: keys2, values: Array.from(vals2) },
+        stats: { count: vals2.length, mean: vals2.length?Array.from(vals2).reduce((a,b)=>a+b,0)/vals2.length:0, variance: 0.001 }
+      });
+      return;
+    } catch {}
+  }
   const t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   cache.set(foamHash, { lastMethod: method, lastParams: params, lastScores: scoreMap });

@@ -47,7 +47,15 @@ export function computeCellTargets({ edgeScores, threshold, invert, contractive,
       if (expansive && !contractive && r <= 0) continue;
       // if both true: fall through
     }
-    const contrib = Math.sign(r) * Math.pow(Math.abs(r), (gamma ?? 1.0));
+    let contrib = Math.sign(r) * Math.pow(Math.abs(r), (gamma ?? 1.0));
+    // Optional: weight by shared face area if available
+    if (edgeToFace && edgeToFace.get) {
+      const face = edgeToFace.get(key);
+      if (face && face.length === 3) {
+        const A = 1; // placeholder area=1; TODO: compute triangle area if points available
+        contrib *= A;
+      }
+    }
     const face = edgeToFace.get(key);
     if (face && face.length === 3) {
       const i0 = face[0]|0, i1 = face[1]|0, i2 = face[2]|0;
