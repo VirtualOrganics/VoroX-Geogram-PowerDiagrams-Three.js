@@ -31,6 +31,7 @@ export function computeCellTargets({ edgeScores, threshold, invert, contractive,
   // Accumulate contributions per site via shared face for each Voronoi edge
   const edges = foam.voronoiEdges || [];
   const edgeToFace = foam.voronoiEdgeToDelaunayFace || new Map();
+  let accepted = 0;
   for (let i = 0; i < edges.length; i++) {
     const t1 = edges[i][0] | 0;
     const t2 = edges[i][1] | 0;
@@ -62,6 +63,26 @@ export function computeCellTargets({ edgeScores, threshold, invert, contractive,
       sum[i0] += contrib; cnt[i0] += 1;
       sum[i1] += contrib; cnt[i1] += 1;
       sum[i2] += contrib; cnt[i2] += 1;
+      accepted++;
+    }
+  }
+
+  // Fallback: if gating produced no signal, ignore gating and accumulate again
+  if (accepted === 0 && edges.length) {
+    for (let i = 0; i < edges.length; i++) {
+      const t1 = edges[i][0] | 0;
+      const t2 = edges[i][1] | 0;
+      const key = t1 < t2 ? `${t1}-${t2}` : `${t2}-${t1}`;
+      const s = edgeScores?.get ? (edgeScores.get(key) || 0) : 0;
+      let r = invert ? (threshold - s) : (s - threshold);
+      let contrib = Math.sign(r) * Math.pow(Math.abs(r), (gamma ?? 1.0));
+      const face = edgeToFace.get(key);
+      if (face && face.length === 3) {
+        const i0 = face[0]|0, i1 = face[1]|0, i2 = face[2]|0;
+        sum[i0] += contrib; cnt[i0] += 1;
+        sum[i1] += contrib; cnt[i1] += 1;
+        sum[i2] += contrib; cnt[i2] += 1;
+      }
     }
   }
 
